@@ -1,47 +1,45 @@
-# 🧾 QuickBooks MCP Server
+# QuickBooks MCP Server
 
-> A secure, local-first Model Context Protocol (MCP) server to query QuickBooks data using natural language inside Claude Desktop.
+A Model Context Protocol (MCP) server for querying QuickBooks data using natural language. Supports both local stdio mode (Claude Desktop) and remote HTTP mode (Claude.ai) with OAuth 2.0 JWT authentication.
 
---- 
+## Requirements
 
-## ✅ MCP Review Certification
-
-This MCP Server is **[certified by MCP Review](https://mcpreview.com/mcp-servers/nikhilgy/quickbooks-mcp-server)**.
-
-Being listed and certified on MCP Review ensures this server adheres to MCP standards and best practices, and is trusted by the developer community.
-
----
-
-## Requirements:
-1. Python 3.10 or higher
+- Python 3.12 or higher
+- [uv](https://docs.astral.sh/uv/) package manager
 
 ## Environment Setup
-For local development, create a `.env` file in the project root with your QuickBooks credentials:
+
+Create a `.env` file from the template:
 
 ```bash
-# Copy the template and fill in your actual credentials
 cp env_template.txt .env
 ```
 
-Then edit the `.env` file with your actual QuickBooks API credentials:
+Fill in your QuickBooks API credentials:
+
 ```
 QUICKBOOKS_CLIENT_ID=your_actual_client_id
 QUICKBOOKS_CLIENT_SECRET=your_actual_client_secret
 QUICKBOOKS_REFRESH_TOKEN=your_actual_refresh_token
 QUICKBOOKS_COMPANY_ID=your_actual_company_id
-QUICKBOOKS_ENV='sandbox' or 'production'
+QUICKBOOKS_ENV=sandbox
 ```
 
-**Note:** The `.env` file is automatically ignored by git for security reasons.
+**Note:** The `.env` file is ignored by git.
 
-## Step 1. Install uv:
-   - MacOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
-   - Windows: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+## Local Mode (stdio)
 
-## Step 2. Configure Claude Desktop
-1. Download [Claude Desktop](https://claude.ai/download).
-2. Launch Claude and go to Settings > Developer > Edit Config.
-3. Modify `claude_desktop_config.json` with:
+For use with Claude Desktop.
+
+### 1. Install uv
+
+- macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
+### 2. Configure Claude Desktop
+
+Go to Settings > Developer > Edit Config and add:
+
 ```json
 {
   "mcpServers": {
@@ -57,18 +55,57 @@ QUICKBOOKS_ENV='sandbox' or 'production'
   }
 }
 ```
-4. Relaunch Claude Desktop.
 
-The first time you open Claude Desktop with these setting it may take
-10-20 seconds before the QuickBooks tools appear in the interface due to
-the installation of the required packages and the download of the most 
-recent QuickBooks API documentation.
+Relaunch Claude Desktop. The first launch may take 10-20 seconds to install dependencies and download the latest QuickBooks API documentation.
 
-Everytime you launch Claude Desktop, the most recent QuickBooks API tools are made available 
-to your AI assistant.
+## Remote Mode (HTTP)
 
-## Step 3. Launch Claude Desktop and let your assistant help you
-### Examples
+For deployment as a remote MCP server accessible by Claude.ai.
+
+### Additional Environment Variables
+
+```
+MCP_TRANSPORT=http
+JWT_SIGNING_SECRET=your_jwt_signing_secret
+JWT_ISSUER=https://auth.nthparallel.com
+PORT=8000
+```
+
+### Running Locally
+
+```bash
+MCP_TRANSPORT=http uv run python main_quickbooks_mcp.py
+```
+
+### Docker Deployment (Railway)
+
+```bash
+docker build -t quickbooks-mcp .
+docker run -p 8000:8000 \
+  -e QUICKBOOKS_CLIENT_ID=... \
+  -e QUICKBOOKS_CLIENT_SECRET=... \
+  -e QUICKBOOKS_REFRESH_TOKEN=... \
+  -e QUICKBOOKS_COMPANY_ID=... \
+  -e QUICKBOOKS_ENV=production \
+  -e JWT_SIGNING_SECRET=... \
+  quickbooks-mcp
+```
+
+### Endpoints
+
+| Path | Auth | Description |
+|------|------|-------------|
+| `/mcp` | JWT required | MCP streamable-HTTP transport |
+| `/health` | None | Health check |
+| `/.well-known/oauth-authorization-server` | None | OAuth discovery |
+| `/.well-known/oauth-protected-resource` | None | Protected resource metadata |
+
+### Authentication
+
+The server validates HS256 JWT Bearer tokens issued by the configured OAuth authorization server. Claude.ai discovers the OAuth server via the `/.well-known/oauth-authorization-server` endpoint. All authenticated users share the same QuickBooks credentials configured on the server.
+
+## Usage Examples
+
 **Query Accounts**
 ```text
 Get all accounts from QuickBooks.
@@ -82,4 +119,4 @@ Get all bills from QuickBooks created after 2024-01-01.
 **Query Customers**
 ```text
 Get all customers from QuickBooks.
-``` 
+```

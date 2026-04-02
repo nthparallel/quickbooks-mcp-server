@@ -2,6 +2,7 @@ from mcp import types
 from mcp.server.fastmcp import FastMCP
 from quickbooks_interaction import QuickBooksSession
 from api_importer import load_apis
+import os
 import sys
 import json
 from pathlib import Path
@@ -38,9 +39,7 @@ def get_quickbooks_entity_schema(
     entity before constructing a query with the
     `query_quickbooks` tool.
     """
-    schema_path = (
-        Path(__file__).parent / "quickbooks_entity_schemas.json"
-    )
+    schema_path = Path(__file__).parent / "quickbooks_entity_schemas.json"
     try:
         with open(schema_path, "r") as f:
             all_schemas = json.load(f)
@@ -99,9 +98,7 @@ def query_quickbooks(query: str) -> types.TextContent:
 
     try:
         response = quickbooks.query(query)
-        return types.TextContent(
-            type="text", text=str(response)
-        )
+        return types.TextContent(type="text", text=str(response))
     except Exception as e:
         return types.TextContent(
             type="text",
@@ -178,30 +175,21 @@ def _make_tool(
                 except KeyError as e:
                     return types.TextContent(
                         type="text",
-                        text=(
-                            "Error: Missing required path "
-                            f"parameter {e}"
-                        ),
+                        text=(f"Error: Missing required path parameter {e}"),
                     )
 
             response = quickbooks.call_route(
                 method_type=api_method,
                 route=route,
                 params=query_params,
-                body=(
-                    request_body if request_body else None
-                ),
+                body=(request_body if request_body else None),
             )
 
-            return types.TextContent(
-                type="text", text=str(response)
-            )
+            return types.TextContent(type="text", text=str(response))
         except Exception as e:
             error_msg = f"Error executing {tool_name}: {e}"
             print(error_msg, file=sys.stderr)
-            return types.TextContent(
-                type="text", text=error_msg
-            )
+            return types.TextContent(type="text", text=error_msg)
 
     return _tool
 
@@ -213,9 +201,7 @@ def register_all_apis():
 
         original_route = api["route"]
         if "/v3/company/{realmId}" in original_route:
-            clean_api_route = original_route.replace(
-                "/v3/company/{realmId}", ""
-            )
+            clean_api_route = original_route.replace("/v3/company/{realmId}", "")
         else:
             clean_api_route = original_route
 
@@ -227,7 +213,7 @@ def register_all_apis():
             .replace("}", "")
         )
 
-        method_name = f'{api["method"]}{clean_route_for_name}'
+        method_name = f"{api['method']}{clean_route_for_name}"
         clean_summary = api["summary"]
         if clean_summary is None:
             words = method_name.split("_")
@@ -236,16 +222,11 @@ def register_all_apis():
 
         doc = clean_summary + ". "
         if response_description != "OK":
-            doc += (
-                "If successful, the outcome will be "
-                f'"{response_description}". '
-            )
+            doc += f'If successful, the outcome will be "{response_description}". '
 
         all_params: dict[str, dict] = {}
         api_params_filtered = [
-            p
-            for p in api.get("parameters", [])
-            if p["name"] != "realmId"
+            p for p in api.get("parameters", []) if p["name"] != "realmId"
         ]
 
         if api_params_filtered:
@@ -268,10 +249,7 @@ def register_all_apis():
             )
 
         if all_params:
-            doc += (
-                "Parameters: "
-                f"{json.dumps(all_params, indent=2)}. "
-            )
+            doc += f"Parameters: {json.dumps(all_params, indent=2)}. "
 
         _make_tool(
             mcp_server=mcp,
@@ -286,5 +264,28 @@ def register_all_apis():
 register_all_apis()
 
 if __name__ == "__main__":
-    print("Starting MCP server...")
-    mcp.run(transport="stdio")
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    if transport == "stdio":
+        print(
+            "Starting MCP server in stdio mode...",
+            file=sys.stderr,
+        )
+        mcp.run(transport="stdio")
+    elif transport == "http":
+        import uvicorn
+
+        from server import create_app
+
+        app = create_app(mcp)
+        port = int(os.getenv("PORT", "8000"))
+        print(
+            f"Starting MCP server in HTTP mode on port {port}...",
+            file=sys.stderr,
+        )
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        print(
+            f"Unknown MCP_TRANSPORT: {transport}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
