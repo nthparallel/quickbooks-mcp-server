@@ -128,8 +128,9 @@ def create_app(mcp_server: "FastMCP") -> FastAPI:  # noqa: F821
         return JSONResponse(
             {
                 "issuer": issuer,
-                "authorization_endpoint": (f"{issuer}/oauth/authorize"),
+                "authorization_endpoint": f"{issuer}/oauth/authorize",
                 "token_endpoint": f"{issuer}/oauth/token",
+                "registration_endpoint": f"{issuer}/oauth/register",
                 "response_types_supported": ["code"],
                 "grant_types_supported": ["authorization_code"],
                 "code_challenge_methods_supported": ["S256"],
