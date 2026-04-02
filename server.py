@@ -1,8 +1,8 @@
 """FastAPI wrapper for the QuickBooks MCP server with JWT auth
 and streamable-HTTP transport."""
 
-import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -14,8 +14,6 @@ from starlette.middleware.base import (
     RequestResponseEndpoint,
 )
 from starlette.responses import Response
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # JWT authentication middleware
@@ -46,7 +44,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         www_auth = f'Bearer realm="{issuer}", resource="{base_url}"'
 
         if not signing_secret:
-            logger.warning("JWT_SIGNING_SECRET is not set — rejecting request")
+            print("AUTH REJECT: JWT_SIGNING_SECRET is not set", file=sys.stderr)
             return JSONResponse(
                 status_code=401,
                 content={
@@ -58,6 +56,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Bearer "):
+            print(
+                f"AUTH REJECT: No Bearer token on {path}",
+                file=sys.stderr,
+            )
             return JSONResponse(
                 status_code=401,
                 content={
@@ -78,9 +80,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 issuer=issuer,
             )
             email = claims.get("email", "unknown")
-            logger.info("Authenticated user: %s", email)
+            print(f"AUTH OK: {email}", file=sys.stderr)
         except JWTError as exc:
-            logger.warning("JWT validation failed: %s", exc)
+            print(f"AUTH REJECT: JWT invalid — {exc}", file=sys.stderr)
             return JSONResponse(
                 status_code=401,
                 content={
@@ -106,9 +108,9 @@ def create_app(mcp_server: "FastMCP") -> FastAPI:  # noqa: F821
     async def lifespan(
         app: FastAPI,
     ) -> AsyncGenerator[None, None]:
-        logger.info("QuickBooks MCP HTTP server starting")
+        print("QuickBooks MCP HTTP server starting", file=sys.stderr)
         yield
-        logger.info("QuickBooks MCP HTTP server shutting down")
+        print("QuickBooks MCP HTTP server shutting down", file=sys.stderr)
 
     app = FastAPI(
         title="QuickBooks MCP Server",
