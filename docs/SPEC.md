@@ -2,7 +2,7 @@
 
 ## Overview
 
-An MCP server that exposes QuickBooks Online API operations as MCP tools. Supports two transport modes: stdio for local Claude Desktop use, and streamable HTTP for remote deployment behind an OAuth-authenticated proxy.
+An MCP server that exposes QuickBooks Online API operations as MCP tools. Supports two transport modes: stdio for local Claude Desktop use, and streamable HTTP for remote deployment with OAuth 2.0 authentication.
 
 ## Architecture
 
@@ -10,23 +10,26 @@ An MCP server that exposes QuickBooks Online API operations as MCP tools. Suppor
 
 **stdio mode** (`MCP_TRANSPORT=stdio`, default): The server runs as a standard MCP stdio process. This is the original mode used by Claude Desktop.
 
-**HTTP mode** (`MCP_TRANSPORT=http`): The server starts a FastAPI application via uvicorn that:
-- Mounts the MCP streamable-HTTP app at `/mcp`
-- Enforces JWT authentication on all `/mcp` requests
-- Serves OAuth discovery endpoints at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`
-- Provides a `/health` endpoint for monitoring
+**HTTP mode** (`MCP_TRANSPORT=http`): The server starts a Starlette application via uvicorn using the MCP SDK's built-in `streamable_http_app()`. This provides:
+- MCP streamable-HTTP transport at `/mcp`
+- Full OAuth 2.0 authorization server with dynamic client registration
+- Bearer token authentication on all `/mcp` requests
+- OAuth discovery at `/.well-known/oauth-authorization-server`
 
 ### Authentication (HTTP mode)
 
-JWT authentication is implemented as Starlette middleware (`JWTAuthMiddleware` in `server.py`):
-- Validates HS256 tokens against `JWT_SIGNING_SECRET`
-- Verifies issuer matches `JWT_ISSUER`
-- Verifies token expiry
-- Returns 401 with `WWW-Authenticate` header on failure
-- Skips auth for `/.well-known/*` and `/health` paths
-- If `JWT_SIGNING_SECRET` is not set, all `/mcp` requests are rejected with 401
+Authentication uses the MCP SDK's built-in OAuth authorization server (`mcp.server.auth`), configured via `OAuthAuthorizationServerProvider`. User authentication is delegated to an external auth worker at `auth.nthparallel.com` which handles Google OAuth login.
 
-All authenticated users share the same QuickBooks credentials. The JWT `email` claim is logged but does not affect access.
+**Double-OAuth flow:**
+1. Claude.ai dynamically registers as a client at `/register`
+2. Claude.ai redirects to `/authorize`
+3. Our server redirects to the auth worker, which redirects to Google
+4. After Google login, the auth worker redirects back to our `/oauth/callback`
+5. Our callback exchanges the auth worker's code for a JWT, creates our own authorization code, and redirects back to Claude.ai
+6. Claude.ai exchanges our code at `/token` for an opaque access token
+7. Claude.ai uses the access token as a Bearer token for `/mcp` requests
+
+All authenticated users share the same QuickBooks credentials. Token storage is in-memory.
 
 ### MCP Tools
 
@@ -38,11 +41,23 @@ Tools are registered at module import time in `main_quickbooks_mcp.py`:
 ### Key Files
 
 - `main_quickbooks_mcp.py`: MCP tool definitions, entry point for both modes
-- `server.py`: FastAPI wrapper with JWT middleware and well-known endpoints (HTTP mode only)
+- `server.py`: OAuth provider implementation and configuration (HTTP mode only)
 - `quickbooks_interaction.py`: QuickBooks API client
 - `api_importer.py`: Parses OpenAPI schema to generate tool definitions
 - `environment.py`: Environment variable access via dotenv
 - `Dockerfile`: Container image for Railway deployment
+
+## HTTP Endpoints
+
+| Path | Auth | Description |
+|------|------|-------------|
+| `/mcp` | Bearer token required | MCP streamable-HTTP transport |
+| `/.well-known/oauth-authorization-server` | None | OAuth server metadata |
+| `/register` | None | Dynamic client registration (RFC 7591) |
+| `/authorize` | None | OAuth authorization endpoint |
+| `/token` | None | OAuth token endpoint |
+| `/oauth/callback` | None | Auth worker callback (internal) |
+| `/health` | None | Health check |
 
 ## Environment Variables
 
@@ -54,6 +69,7 @@ Tools are registered at module import time in `main_quickbooks_mcp.py`:
 | `QUICKBOOKS_COMPANY_ID` | Yes | - | QuickBooks company/realm ID |
 | `QUICKBOOKS_ENV` | Yes | - | `sandbox` or `production` |
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
-| `JWT_SIGNING_SECRET` | HTTP mode | - | HS256 signing secret for JWT validation |
-| `JWT_ISSUER` | No | `https://auth.nthparallel.com` | Expected JWT issuer |
+| `SERVER_BASE_URL` | HTTP mode | - | Public URL of this server |
+| `AUTH_WORKER_BASE_URL` | No | `https://auth.nthparallel.com` | Auth worker URL |
+| `AUTH_WORKER_CLIENT_ID` | HTTP mode | - | Client ID registered at auth worker |
 | `PORT` | No | `8000` | HTTP server port |

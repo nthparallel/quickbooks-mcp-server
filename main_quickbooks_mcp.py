@@ -274,9 +274,10 @@ if __name__ == "__main__":
     elif transport == "http":
         import uvicorn
 
-        from server import create_app
+        from server import configure_auth
 
-        app = create_app(mcp)
+        configure_auth(mcp)
+        app = mcp.streamable_http_app()
         port = int(os.getenv("PORT", "8000"))
         print(
             f"Starting MCP server in HTTP mode on port {port}...",

@@ -7,12 +7,13 @@ QUICKBOOKS_ENV=sandbox
 # HTTP transport mode (set to "http" for Railway deployment, "stdio" for local)
 MCP_TRANSPORT=stdio
 
-# JWT auth (required when MCP_TRANSPORT=http)
-JWT_SIGNING_SECRET=
-JWT_ISSUER=https://auth.nthparallel.com
+# OAuth (required when MCP_TRANSPORT=http)
+# The public URL of this MCP server
+SERVER_BASE_URL=
+# Auth worker base URL
+AUTH_WORKER_BASE_URL=https://auth.nthparallel.com
+# Client ID pre-registered in the auth worker's KV for this server
+AUTH_WORKER_CLIENT_ID=
 
 # Server config (optional, defaults shown)
 PORT=8000
-# Public URL when behind a reverse proxy (Cloudflare tunnel, etc.)
-# If not set, uses X-Forwarded-Proto/Host headers
-SERVER_BASE_URL=

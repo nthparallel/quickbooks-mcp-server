@@ -66,15 +66,20 @@ For deployment as a remote MCP server accessible by Claude.ai.
 
 ```
 MCP_TRANSPORT=http
-JWT_SIGNING_SECRET=your_jwt_signing_secret
-JWT_ISSUER=https://auth.nthparallel.com
+SERVER_BASE_URL=https://your-public-url.example.com
+AUTH_WORKER_BASE_URL=https://auth.nthparallel.com
+AUTH_WORKER_CLIENT_ID=your-registered-client-id
 PORT=8000
 ```
+
+### Prerequisites
+
+Register a client for this server in the auth worker's KV store before deploying. Set the resulting client ID as `AUTH_WORKER_CLIENT_ID`.
 
 ### Running Locally
 
 ```bash
-MCP_TRANSPORT=http uv run python main_quickbooks_mcp.py
+MCP_TRANSPORT=http SERVER_BASE_URL=http://localhost:8000 AUTH_WORKER_CLIENT_ID=your-id uv run python main_quickbooks_mcp.py
 ```
 
 ### Docker Deployment (Railway)
@@ -87,7 +92,8 @@ docker run -p 8000:8000 \
   -e QUICKBOOKS_REFRESH_TOKEN=... \
   -e QUICKBOOKS_COMPANY_ID=... \
   -e QUICKBOOKS_ENV=production \
-  -e JWT_SIGNING_SECRET=... \
+  -e SERVER_BASE_URL=https://your-public-url.example.com \
+  -e AUTH_WORKER_CLIENT_ID=... \
   quickbooks-mcp
 ```
 
@@ -95,14 +101,16 @@ docker run -p 8000:8000 \
 
 | Path | Auth | Description |
 |------|------|-------------|
-| `/mcp` | JWT required | MCP streamable-HTTP transport |
+| `/mcp` | Bearer token | MCP streamable-HTTP transport |
+| `/.well-known/oauth-authorization-server` | None | OAuth server metadata |
+| `/register` | None | Dynamic client registration |
+| `/authorize` | None | OAuth authorization endpoint |
+| `/token` | None | OAuth token endpoint |
 | `/health` | None | Health check |
-| `/.well-known/oauth-authorization-server` | None | OAuth discovery |
-| `/.well-known/oauth-protected-resource` | None | Protected resource metadata |
 
 ### Authentication
 
-The server validates HS256 JWT Bearer tokens issued by the configured OAuth authorization server. Claude.ai discovers the OAuth server via the `/.well-known/oauth-authorization-server` endpoint. All authenticated users share the same QuickBooks credentials configured on the server.
+The server uses the MCP SDK's built-in OAuth 2.0 authorization server with dynamic client registration. User authentication is delegated to the auth worker at `auth.nthparallel.com`, which handles Google OAuth login. Claude.ai discovers the OAuth server via `/.well-known/oauth-authorization-server`, registers dynamically, and completes the authorization code flow with PKCE. All authenticated users share the same QuickBooks credentials.
 
 ## Usage Examples
 
