@@ -264,7 +264,7 @@ def register_all_apis():
 register_all_apis()
 
 if __name__ == "__main__":
-    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
     if transport == "stdio":
         print(
             "Starting MCP server in stdio mode...",
