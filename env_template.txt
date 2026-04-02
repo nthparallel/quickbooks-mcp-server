@@ -2,4 +2,14 @@ QUICKBOOKS_CLIENT_ID=your_client_id_here
 QUICKBOOKS_CLIENT_SECRET=your_client_secret_here
 QUICKBOOKS_REFRESH_TOKEN=your_refresh_token_here
 QUICKBOOKS_COMPANY_ID=your_company_id_here
-QUICKBOOKS_ENV=sandbox 
+QUICKBOOKS_ENV=sandbox
+
+# HTTP transport mode (set to "http" for Railway deployment, "stdio" for local)
+MCP_TRANSPORT=stdio
+
+# JWT auth (required when MCP_TRANSPORT=http)
+JWT_SIGNING_SECRET=
+JWT_ISSUER=https://auth.nthparallel.com
+
+# Server config (optional, defaults shown)
+PORT=8000
