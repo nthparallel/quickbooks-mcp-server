@@ -3,8 +3,12 @@ import requests
 from requests.auth import HTTPBasicAuth
 from environment import Environment
 
+ALLOWED_HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+REQUEST_TIMEOUT = 30
+
+
 class QuickBooksSession:
-    def __init__(self):        
+    def __init__(self):
         # Get credentials from environment variables
         self.client_id = Environment.get('QUICKBOOKS_CLIENT_ID')
         self.client_secret = Environment.get('QUICKBOOKS_CLIENT_SECRET')
@@ -17,7 +21,7 @@ class QuickBooksSession:
             'sandbox': 'https://sandbox-quickbooks.api.intuit.com'
         }
         self.base_url = base_urls.get(env, base_urls['sandbox'])
-        
+
         self.token_url = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
         self.access_token = None
         self.refresh_access_token()
@@ -41,52 +45,96 @@ class QuickBooksSession:
             'grant_type': 'refresh_token',
             'refresh_token': self.refresh_token
         }
-        response = requests.post(self.token_url, headers=headers, data=data, 
-                               auth=HTTPBasicAuth(self.client_id, self.client_secret))
+        response = requests.post(
+            self.token_url,
+            headers=headers,
+            data=data,
+            auth=HTTPBasicAuth(self.client_id, self.client_secret),
+            timeout=REQUEST_TIMEOUT,
+        )
 
         if response.status_code == 200:
             tokens = response.json()
             self.access_token = tokens['access_token']
             self.refresh_token = tokens.get('refresh_token', self.refresh_token)
         else:
-            message = f"Error refreshing token: {response.status_code} {response.text}"
-            print(message, file=sys.stderr)
-            raise Exception(message)
+            print(
+                f"Error refreshing token: {response.status_code}",
+                file=sys.stderr,
+            )
+            raise Exception(
+                f"Failed to refresh token: HTTP {response.status_code}"
+            )
 
-    def call_route(self, method_type, route, params: dict = None, body: dict = None):
+    def _make_request(self, method, url, params, body):
+        """Execute a single HTTP request with timeout."""
+        if method == requests.get:
+            return method(
+                url,
+                params=params,
+                headers=self._get_headers(),
+                timeout=REQUEST_TIMEOUT,
+            )
+        return method(
+            url,
+            json=body,
+            params=params,
+            headers=self._get_headers(),
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    def call_route(
+        self,
+        method_type: str,
+        route: str,
+        params: dict | None = None,
+        body: dict | None = None,
+    ):
+        if method_type not in ALLOWED_HTTP_METHODS:
+            raise ValueError(
+                f"Unsupported HTTP method: {method_type}"
+            )
+
         method = getattr(requests, method_type)
         if not route.startswith('/'):
             route = '/' + route
-        
-        url = f"{self.base_url}/v3/company/{self.company_id}{route}"
 
-        if method_type == 'get':
-            response = method(url, params=params, headers=self._get_headers())
-        else:
-            response = method(url, json=body, params=params, headers=self._get_headers())
+        url = (
+            f"{self.base_url}/v3/company/{self.company_id}{route}"
+        )
+
+        response = self._make_request(method, url, params, body)
 
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 401:
-            print('Access token expired. Refreshing token...', file=sys.stderr)
+            print(
+                "Access token expired. Refreshing…",
+                file=sys.stderr,
+            )
             self.refresh_access_token()
-            print('Refreshed the access token', file=sys.stderr)
 
-            if method_type == 'get':
-                response = method(url, params=params, headers=self._get_headers())
-            else:
-                response = method(url, json=body, params=params, headers=self._get_headers())
-            
+            response = self._make_request(
+                method, url, params, body
+            )
+
             if response.status_code == 200:
                 return response.json()
             else:
-                message = f"Error: {response.status_code} {response.text}"
-                print(message, file=sys.stderr)
-                return message
+                print(
+                    f"Error after token refresh: "
+                    f"HTTP {response.status_code}",
+                    file=sys.stderr,
+                )
+                return (
+                    f"Error: HTTP {response.status_code}"
+                )
         else:
-            message = f"Error: {response.status_code} {response.text}"
-            print(message, file=sys.stderr)
-            return message
+            print(
+                f"Error: HTTP {response.status_code}",
+                file=sys.stderr,
+            )
+            return f"Error: HTTP {response.status_code}"
 
     def query(self, query: str):
         """Execute a QuickBooks query."""
@@ -114,4 +162,4 @@ class QuickBooksSession:
 
 if __name__ == '__main__':
     quickbooks = QuickBooksSession()
-    print("Access token:", quickbooks.access_token) 
+    print("QuickBooks session initialized successfully.")
