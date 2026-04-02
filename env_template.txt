@@ -13,3 +13,6 @@ JWT_ISSUER=https://auth.nthparallel.com
 
 # Server config (optional, defaults shown)
 PORT=8000
+# Public URL when behind a reverse proxy (Cloudflare tunnel, etc.)
+# If not set, uses X-Forwarded-Proto/Host headers
+SERVER_BASE_URL=

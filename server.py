@@ -22,6 +22,23 @@ from starlette.responses import Response
 _PUBLIC_PREFIXES = ("/.well-known/", "/health")
 
 
+def _get_base_url(request: Request) -> str:
+    """Return the public-facing base URL, preferring the
+    SERVER_BASE_URL env var, then X-Forwarded headers, then
+    the request's own base URL."""
+    configured = os.getenv("SERVER_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
+
+    # Trust X-Forwarded-Proto/Host from Cloudflare/Railway
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get(
+        "x-forwarded-host",
+        request.headers.get("host", request.url.netloc),
+    )
+    return f"{proto}://{host}"
+
+
 class JWTAuthMiddleware(BaseHTTPMiddleware):
     """Validates HS256 JWT Bearer tokens on all non-public
     paths."""
@@ -39,7 +56,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         signing_secret = os.getenv("JWT_SIGNING_SECRET")
         issuer = os.getenv("JWT_ISSUER", "https://auth.nthparallel.com")
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _get_base_url(request)
 
         www_auth = f'Bearer realm="{issuer}", resource="{base_url}"'
 
@@ -137,12 +154,13 @@ def create_app(mcp_server: "FastMCP") -> FastAPI:  # noqa: F821
             }
         )
 
+    @app.get("/.well-known/oauth-protected-resource/{path:path}")
     @app.get("/.well-known/oauth-protected-resource")
     async def oauth_protected_resource(
         request: Request,
     ) -> JSONResponse:
         issuer = os.getenv("JWT_ISSUER", "https://auth.nthparallel.com")
-        base_url = str(request.base_url).rstrip("/")
+        base_url = _get_base_url(request)
         return JSONResponse(
             {
                 "resource": base_url,
